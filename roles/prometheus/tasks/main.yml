@@ -1,0 +1,128 @@
+---
+- name: Install Prometheus dependencies
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - tar
+    state: present
+
+- name: Create Prometheus group
+  ansible.builtin.group:
+    name: "{{ prometheus_group }}"
+    system: true
+
+- name: Create Prometheus user
+  ansible.builtin.user:
+    name: "{{ prometheus_user }}"
+    group: "{{ prometheus_group }}"
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+
+- name: Create Prometheus directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ prometheus_user }}"
+    group: "{{ prometheus_group }}"
+    mode: "0755"
+  loop:
+    - "{{ prometheus_config_dir }}"
+    - "{{ prometheus_data_dir }}"
+
+- name: Download Prometheus archive
+  ansible.builtin.get_url:
+    url: "{{ prometheus_download_url }}"
+    dest: "/tmp/prometheus-{{ prometheus_version }}.tar.gz"
+    mode: "0644"
+
+- name: Extract Prometheus archive
+  ansible.builtin.unarchive:
+    src: "/tmp/prometheus-{{ prometheus_version }}.tar.gz"
+    dest: /tmp
+    remote_src: true
+
+- name: Install Prometheus binaries
+  ansible.builtin.copy:
+    src: "/tmp/prometheus-{{ prometheus_version }}.{{ prometheus_arch }}/{{ item }}"
+    dest: "{{ prometheus_install_dir }}/{{ item }}"
+    mode: "0755"
+    remote_src: true
+  loop:
+    - prometheus
+    - promtool
+
+- name: Install Prometheus console templates
+  ansible.builtin.copy:
+    src: "/tmp/prometheus-{{ prometheus_version }}.{{ prometheus_arch }}/{{ item }}"
+    dest: "{{ prometheus_config_dir }}/{{ item }}"
+    owner: "{{ prometheus_user }}"
+    group: "{{ prometheus_group }}"
+    mode: "0755"
+    remote_src: true
+  loop:
+    - consoles
+    - console_libraries
+
+- name: Deploy Prometheus config
+  ansible.builtin.template:
+    src: prometheus.yml.j2
+    dest: "{{ prometheus_config_dir }}/prometheus.yml"
+    owner: "{{ prometheus_user }}"
+    group: "{{ prometheus_group }}"
+    mode: "0644"
+  notify: restart prometheus
+
+- name: Deploy Prometheus web config (optional)
+  ansible.builtin.template:
+    src: web.yml.j2
+    dest: "{{ prometheus_web_config_file }}"
+    owner: "{{ prometheus_user }}"
+    group: "{{ prometheus_group }}"
+    mode: "0640"
+  when: prometheus_enable_web_config | bool
+  notify: restart prometheus
+
+- name: Install Prometheus systemd unit
+  ansible.builtin.template:
+    src: prometheus.service.j2
+    dest: /etc/systemd/system/prometheus.service
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart prometheus
+
+- name: Reload systemd after unit change
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start Prometheus
+  ansible.builtin.service:
+    name: prometheus
+    state: started
+    enabled: true
+
+- name: Wait for Prometheus readiness
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:9090/-/ready"
+    return_content: false
+    status_code: 200
+  register: prometheus_ready
+  retries: 10
+  delay: 3
+  until: prometheus_ready.status == 200
+
+- name: Install and configure node_exporter
+  ansible.builtin.include_tasks: node_exporter.yml
+  when: prometheus_enable_node_exporter | bool
+
+- name: Build allowed IP list for Prometheus firewall
+  ansible.builtin.set_fact:
+    prometheus_firewall_allowed_ips: "{{ groups['monitoring_servers'] | default([]) }}"
+  when:
+    - prometheus_manage_firewall | default(false)
+    - prometheus_firewall_allow_9090_from_monitoring | default(true)
+
+- name: Configure firewall with nftables
+  ansible.builtin.include_tasks: firewall.yml
+  when: prometheus_manage_firewall | default(false)

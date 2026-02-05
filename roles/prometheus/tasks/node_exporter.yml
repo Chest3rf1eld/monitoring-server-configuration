@@ -1,0 +1,32 @@
+---
+- name: Download node_exporter archive
+  ansible.builtin.get_url:
+    url: "{{ node_exporter_download_url }}"
+    dest: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
+    mode: "0644"
+
+- name: Extract node_exporter archive
+  ansible.builtin.unarchive:
+    src: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
+    dest: /tmp
+    remote_src: true
+
+- name: Install node_exporter binary
+  ansible.builtin.copy:
+    src: "/tmp/node_exporter-{{ node_exporter_version }}.{{ node_exporter_arch }}/node_exporter"
+    dest: "{{ prometheus_install_dir }}/node_exporter"
+    mode: "0755"
+    remote_src: true
+
+- name: Install node_exporter systemd unit
+  ansible.builtin.template:
+    src: node_exporter.service.j2
+    dest: /etc/systemd/system/node_exporter.service
+    mode: "0644"
+  notify: reload systemd
+
+- name: Enable and start node_exporter
+  ansible.builtin.service:
+    name: node_exporter
+    state: started
+    enabled: true

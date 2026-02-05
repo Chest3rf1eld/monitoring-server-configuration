@@ -1,0 +1,13 @@
+---
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: restart prometheus
+  ansible.builtin.service:
+    name: prometheus
+    state: restarted
+
+- name: apply nftables
+  ansible.builtin.command: nft -f /etc/nftables.conf
+  changed_when: true

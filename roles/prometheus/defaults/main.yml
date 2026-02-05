@@ -1,0 +1,25 @@
+---
+prometheus_version: "2.49.1"
+prometheus_arch: "linux-amd64"
+prometheus_download_url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.{{ prometheus_arch }}.tar.gz"
+prometheus_user: prometheus
+prometheus_group: prometheus
+prometheus_install_dir: /usr/local/bin
+prometheus_config_dir: /etc/prometheus
+prometheus_data_dir: /var/lib/prometheus
+prometheus_web_listen_address: "0.0.0.0:9090"
+prometheus_enable_web_config: false
+prometheus_web_config_file: "{{ prometheus_config_dir }}/web.yml"
+prometheus_basic_auth_users: {}
+
+prometheus_enable_node_exporter: false
+node_exporter_version: "1.8.1"
+node_exporter_arch: "linux-amd64"
+node_exporter_download_url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.{{ node_exporter_arch }}.tar.gz"
+
+prometheus_manage_firewall: true
+prometheus_firewall_tcp_ports:
+  - 22
+  - 9090
+prometheus_firewall_allow_9090_from_monitoring: true
+prometheus_firewall_allowed_ips: []

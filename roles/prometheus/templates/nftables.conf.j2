@@ -1,0 +1,33 @@
+#!/usr/sbin/nft -f
+
+flush ruleset
+
+table inet filter {
+    chain input {
+        type filter hook input priority 0;
+        policy drop;
+
+        iif "lo" accept
+        ct state established,related accept
+
+        ip protocol icmp accept
+        ip6 nexthdr icmpv6 accept
+
+{% if prometheus_firewall_allowed_ips | length > 0 %}
+        tcp dport 9090 ip saddr { {{ prometheus_firewall_allowed_ips | join(', ') }} } accept
+        tcp dport { {{ prometheus_firewall_tcp_ports | reject('equalto', 9090) | list | join(', ') }} } accept
+{% else %}
+        tcp dport { {{ prometheus_firewall_tcp_ports | join(', ') }} } accept
+{% endif %}
+    }
+
+    chain forward {
+        type filter hook forward priority 0;
+        policy drop;
+    }
+
+    chain output {
+        type filter hook output priority 0;
+        policy accept;
+    }
+}
