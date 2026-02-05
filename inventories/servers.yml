@@ -1,0 +1,14 @@
+all:
+  vars:
+    ssh_key_path: /home/<USER>/.ssh/<SSH_KEY>
+  children:
+    monitoring_servers:
+      hosts:
+        <MONITORING_SERVER_IP>:
+          ansible_user: <ANSIBLE_USER>
+          ansible_ssh_private_key_file: "{{ ssh_key_path }}"
+    observation_servers:
+      hosts:
+        0.0.0.0:
+          ansible_user: <ANSIBLE_USER>
+          ansible_ssh_private_key_file: "{{ ssh_key_path }}"
