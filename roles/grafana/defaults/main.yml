@@ -14,6 +14,8 @@ grafana_admin_password: ""
 grafana_admin_password_file: /var/lib/grafana/.admin_password_set
 grafana_prometheus_url: ""
 grafana_prometheus_datasource_name: "Prometheus"
+grafana_loki_url: ""
+grafana_loki_datasource_name: "Loki"
 
 # Feature toggles: enable/disable optional Grafana tasks
 grafana_install_nginx: true

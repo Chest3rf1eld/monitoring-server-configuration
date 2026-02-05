@@ -99,10 +99,24 @@
     grafana_prometheus_url: "http://{{ (groups['observation_servers'] | default([]) | first | default('localhost')) }}:9090"
   when: grafana_prometheus_url is not defined or grafana_prometheus_url == ""
 
+- name: Build Loki URL from observation_servers group
+  ansible.builtin.set_fact:
+    grafana_loki_url: "http://{{ (groups['observation_servers'] | default([]) | first | default('localhost')) }}:3100"
+  when: grafana_loki_url is not defined or grafana_loki_url == ""
+
 - name: Provision Prometheus datasource
   ansible.builtin.template:
     src: provisioning/datasources/prometheus.yml.j2
     dest: /etc/grafana/provisioning/datasources/prometheus.yml
+    owner: grafana
+    group: grafana
+    mode: "0644"
+  notify: restart grafana
+
+- name: Provision Loki datasource
+  ansible.builtin.template:
+    src: provisioning/datasources/loki.yml.j2
+    dest: /etc/grafana/provisioning/datasources/loki.yml
     owner: grafana
     group: grafana
     mode: "0644"
