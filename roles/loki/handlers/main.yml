@@ -1,0 +1,18 @@
+---
+- name: reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: restart loki
+  ansible.builtin.service:
+    name: loki
+    state: restarted
+
+- name: restart promtail
+  ansible.builtin.service:
+    name: promtail
+    state: restarted
+
+- name: apply nftables
+  ansible.builtin.command: nft -f /etc/nftables.conf
+  changed_when: true

@@ -2,4 +2,4 @@
 - hosts: observation_servers
   become: true
   roles:
-    - prometheus
+    - loki

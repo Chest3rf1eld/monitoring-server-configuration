@@ -1,0 +1,214 @@
+---
+- name: Install Loki dependencies
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - unzip
+    state: present
+
+- name: Create Loki group
+  ansible.builtin.group:
+    name: "{{ loki_group }}"
+    system: true
+
+- name: Create Loki user
+  ansible.builtin.user:
+    name: "{{ loki_user }}"
+    group: "{{ loki_group }}"
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+
+- name: Create Loki directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ loki_user }}"
+    group: "{{ loki_group }}"
+    mode: "0755"
+  loop:
+    - "{{ loki_config_dir }}"
+    - "{{ loki_data_dir }}"
+    - "{{ promtail_config_dir }}"
+    - /var/lib/promtail
+
+- name: Download Loki archive
+  ansible.builtin.get_url:
+    url: "{{ loki_download_url }}"
+    dest: "/tmp/loki-{{ loki_version }}.zip"
+    mode: "0644"
+
+- name: Extract Loki archive
+  ansible.builtin.unarchive:
+    src: "/tmp/loki-{{ loki_version }}.zip"
+    dest: /tmp
+    remote_src: true
+
+- name: Install Loki binary
+  block:
+    - name: Find Loki binary
+      ansible.builtin.find:
+        paths: /tmp
+        patterns: "loki-linux-amd64"
+        file_type: file
+      register: loki_bin_find
+
+    - name: Set Loki binary path
+      ansible.builtin.set_fact:
+        loki_bin_path: "{{ (loki_bin_find.files | map(attribute='path') | list | first) | default('') }}"
+
+    - name: Fail if Loki binary not found
+      ansible.builtin.fail:
+        msg: "Loki binary not found after extraction"
+      when: loki_bin_path == ""
+
+    - name: Stat Loki source and destination
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ loki_bin_path }}"
+        - "{{ loki_install_dir }}/loki"
+      register: loki_bin_stats
+
+    - name: Install Loki binary (only if changed)
+      ansible.builtin.copy:
+        src: "{{ loki_bin_path }}"
+        dest: "{{ loki_install_dir }}/loki"
+        mode: "0755"
+        remote_src: true
+      when: >
+        (not loki_bin_stats.results[1].stat.exists) or
+        (loki_bin_stats.results[0].stat.checksum != loki_bin_stats.results[1].stat.checksum)
+
+- name: Download Promtail archive
+  ansible.builtin.get_url:
+    url: "{{ promtail_download_url }}"
+    dest: "/tmp/promtail-{{ promtail_version }}.zip"
+    mode: "0644"
+
+- name: Extract Promtail archive
+  ansible.builtin.unarchive:
+    src: "/tmp/promtail-{{ promtail_version }}.zip"
+    dest: /tmp
+    remote_src: true
+
+- name: Install Promtail binary
+  block:
+    - name: Find Promtail binary
+      ansible.builtin.find:
+        paths: /tmp
+        patterns: "promtail-linux-amd64"
+        file_type: file
+      register: promtail_bin_find
+
+    - name: Set Promtail binary path
+      ansible.builtin.set_fact:
+        promtail_bin_path: "{{ (promtail_bin_find.files | map(attribute='path') | list | first) | default('') }}"
+
+    - name: Fail if Promtail binary not found
+      ansible.builtin.fail:
+        msg: "Promtail binary not found after extraction"
+      when: promtail_bin_path == ""
+
+    - name: Stat Promtail source and destination
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ promtail_bin_path }}"
+        - "{{ loki_install_dir }}/promtail"
+      register: promtail_bin_stats
+
+    - name: Install Promtail binary (only if changed)
+      ansible.builtin.copy:
+        src: "{{ promtail_bin_path }}"
+        dest: "{{ loki_install_dir }}/promtail"
+        mode: "0755"
+        remote_src: true
+      when: >
+        (not promtail_bin_stats.results[1].stat.exists) or
+        (promtail_bin_stats.results[0].stat.checksum != promtail_bin_stats.results[1].stat.checksum)
+
+- name: Deploy Loki config
+  ansible.builtin.template:
+    src: loki.yml.j2
+    dest: "{{ loki_config_dir }}/loki.yml"
+    owner: "{{ loki_user }}"
+    group: "{{ loki_group }}"
+    mode: "0644"
+  notify: restart loki
+
+- name: Deploy Promtail config
+  ansible.builtin.template:
+    src: promtail.yml.j2
+    dest: "{{ promtail_config_dir }}/promtail.yml"
+    owner: "{{ loki_user }}"
+    group: "{{ loki_group }}"
+    mode: "0644"
+  notify: restart promtail
+
+- name: Install Loki systemd unit
+  ansible.builtin.template:
+    src: loki.service.j2
+    dest: /etc/systemd/system/loki.service
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart loki
+
+- name: Install Promtail systemd unit
+  ansible.builtin.template:
+    src: promtail.service.j2
+    dest: /etc/systemd/system/promtail.service
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart promtail
+
+- name: Reload systemd after unit change
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start Loki
+  ansible.builtin.service:
+    name: loki
+    state: started
+    enabled: true
+
+- name: Enable and start Promtail
+  ansible.builtin.service:
+    name: promtail
+    state: started
+    enabled: true
+
+- name: Wait for Loki readiness
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:3100/ready"
+    return_content: false
+    status_code: 200
+  register: loki_ready
+  retries: 10
+  delay: 3
+  until: loki_ready.status == 200
+
+- name: Build allowed IP list for Loki firewall
+  ansible.builtin.set_fact:
+    loki_firewall_allowed_ips: "{{ groups['monitoring_servers'] | default([]) }}"
+  when: loki_firewall_allow_3100_from_monitoring | default(true)
+
+- name: Install nftables
+  ansible.builtin.apt:
+    name: nftables
+    state: present
+
+- name: Deploy nftables configuration
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
+    mode: "0644"
+  notify: apply nftables
+
+- name: Enable and start nftables
+  ansible.builtin.service:
+    name: nftables
+    state: started
+    enabled: true
