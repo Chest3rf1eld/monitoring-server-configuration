@@ -82,3 +82,31 @@
     name: grafana-server
     state: started
     enabled: true
+
+- name: Ensure Grafana provisioning directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: grafana
+    group: grafana
+    mode: "0755"
+  loop:
+    - /etc/grafana/provisioning
+    - /etc/grafana/provisioning/datasources
+
+- name: Build Prometheus URL from observation_servers group
+  ansible.builtin.set_fact:
+    grafana_prometheus_url: "http://{{ (groups['observation_servers'] | default([]) | first | default('localhost')) }}:9090"
+  when: grafana_prometheus_url is not defined or grafana_prometheus_url == ""
+
+- name: Provision Prometheus datasource
+  ansible.builtin.template:
+    src: provisioning/datasources/prometheus.yml.j2
+    dest: /etc/grafana/provisioning/datasources/prometheus.yml
+    owner: grafana
+    group: grafana
+    mode: "0644"
+  notify: restart grafana
+
+- name: Reload Grafana after provisioning
+  ansible.builtin.meta: flush_handlers
