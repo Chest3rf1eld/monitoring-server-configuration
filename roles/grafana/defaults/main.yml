@@ -12,3 +12,6 @@ grafana_firewall_tcp_ports:
   - 443
   - 9090
   - 3100
+grafana_admin_password: ""
+grafana_admin_password_file: /var/lib/grafana/.admin_password_set
+grafana_admin_force_reset: false

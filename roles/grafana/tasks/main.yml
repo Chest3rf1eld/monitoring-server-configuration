@@ -2,8 +2,13 @@
 - name: Install and configure Grafana
   ansible.builtin.include_tasks: grafana.yml
 
+- name: Configure Grafana admin account
+  ansible.builtin.include_tasks: admin.yml
+
 - name: Install and configure Nginx as reverse proxy
   ansible.builtin.include_tasks: nginx.yml
+  when: grafana_install_nginx | default(false)
 
 - name: Configure firewall with nftables (optional)
   ansible.builtin.include_tasks: firewall.yml
+  when: grafana_enable_firewall | default(false)
