@@ -1,0 +1,9 @@
+---
+- name: reload nginx
+  ansible.builtin.service:
+    name: nginx
+    state: reloaded
+
+- name: apply nftables
+  ansible.builtin.command: nft -f /etc/nftables.conf
+  changed_when: true

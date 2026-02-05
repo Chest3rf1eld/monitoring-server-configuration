@@ -1,0 +1,14 @@
+---
+grafana_install_nginx: false
+grafana_domain: <GRAFANA_DOMAIN>
+grafana_enable_https: true
+grafana_letsencrypt_email: "admin@{{ grafana_domain }}"
+grafana_letsencrypt_webroot: /var/www/letsencrypt
+grafana_enable_firewall: false
+grafana_firewall_tcp_ports:
+  - 22
+  - 80
+  - 8080
+  - 443
+  - 9090
+  - 3100
