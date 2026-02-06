@@ -1,93 +1,220 @@
 # monitoring server configuration
 
+Этот репозиторий содержит роли Ansible для развёртывания:
+- Grafana (с nginx reverse proxy, Let's Encrypt, provisioning data sources)
+- Prometheus (опционально node_exporter, web config)
+- Loki (с promtail)
+- nftables (минимальные правила)
 
+## Структура
 
-## Getting started
+- `roles/grafana` — установка Grafana + nginx + TLS + provisioning
+- `roles/prometheus` — установка Prometheus + node_exporter + firewall
+- `roles/loki` — установка Loki + promtail + firewall
+- `inventories/` — инвентори и group_vars
+- `playbooks/` — плейбуки окружений
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## Быстрый старт
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+1. Заполни инвентори
 
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
+`inventories/servers.yml`:
+```yaml
+all:
+  vars:
+    ssh_key_path: /home/<USER>/.ssh/<SSH_KEY>
+  children:
+    monitoring_servers:
+      hosts:
+        <MONITORING_SERVER_IP>:
+          ansible_user: <ANSIBLE_USER>
+          ansible_ssh_private_key_file: "{{ ssh_key_path }}"
+    observation_servers:
+      hosts:
+        <OBSERVATION_SERVER_IP>:
+          ansible_user: <ANSIBLE_USER>
+          ansible_ssh_private_key_file: "{{ ssh_key_path }}"
 ```
-cd existing_repo
-git remote add origin https://<GITLAB_DOMAIN>/infrastructure-as-code/monitoring-server-configuration.git
-git branch -M main
-git push -uf origin main
+
+2. Запусти плейбуки
+
+Grafana (monitoring сервер):
+```bash
+ansible-playbook -i inventories/servers.yml playbooks/monitoring_server.yml --ask-vault-pass
 ```
 
-## Integrate with your tools
+Prometheus + Loki (observation сервер):
+```bash
+ansible-playbook -i inventories/servers.yml playbooks/observation_servers.yml
+```
 
-- [ ] [Set up project integrations](https://<GITLAB_DOMAIN>/infrastructure-as-code/monitoring-server-configuration/-/settings/integrations)
+## Роль Grafana
 
-## Collaborate with your team
+### Что делает
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+- Устанавливает Grafana из APT зеркала
+- Конфигурирует nginx reverse proxy и TLS (Let's Encrypt)
+- Настраивает provisioning data sources (Prometheus, Loki)
+- Опционально включает firewall
+- Сбрасывает админ-пароль по флагу
 
-## Test and Deploy
+### Основные переменные
 
-Use the built-in continuous integration in GitLab.
+`roles/grafana/defaults/main.yml`:
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+```yaml
+grafana_domain: <GRAFANA_DOMAIN>
+grafana_enable_https: true
+grafana_letsencrypt_email: "admin@{{ grafana_domain }}"
+grafana_letsencrypt_webroot: /var/www/letsencrypt
 
-***
+grafana_firewall_tcp_ports:
+  - 22
+  - 80
+  - 8080
+  - 443
+  - 9090
+  - 3100
 
-# Editing this README
+grafana_admin_password: ""
+grafana_admin_password_file: /var/lib/grafana/.admin_password_set
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+grafana_prometheus_url: ""
+grafana_prometheus_datasource_name: "Prometheus"
 
-## Suggestions for a good README
+grafana_loki_url: ""
+grafana_loki_datasource_name: "Loki"
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+# Feature toggles: enable/disable optional Grafana tasks
+grafana_install_nginx: true
+grafana_enable_firewall: true
+grafana_admin_force_reset: false
+```
 
-## Name
-Choose a self-explaining name for your project.
+### Provisioning datasource
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+Datasource файлы появляются на сервере тут:
+- `/etc/grafana/provisioning/datasources/prometheus.yml`
+- `/etc/grafana/provisioning/datasources/loki.yml`
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+По умолчанию IP берётся из группы `observation_servers`.
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+## Роль Prometheus
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+### Что делает
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+- Устанавливает Prometheus (binaries)
+- Создаёт пользователя/группу
+- Разворачивает конфиг и systemd unit
+- Включает node_exporter
+- Проверяет readiness `/ready`
+- Настраивает firewall (nftables)
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+### Основные переменные
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+`roles/prometheus/defaults/main.yml`:
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+```yaml
+prometheus_version: "2.49.1"
+prometheus_arch: "linux-amd64"
+prometheus_download_url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.{{ prometheus_arch }}.tar.gz"
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+prometheus_web_listen_address: "0.0.0.0:9090"
+prometheus_enable_web_config: true
+prometheus_web_config_file: "{{ prometheus_config_dir }}/web.yml"
+prometheus_basic_auth_users: {}
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+prometheus_enable_node_exporter: true
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+prometheus_manage_firewall: true
+prometheus_firewall_tcp_ports:
+  - 22
+  - 9090
+prometheus_firewall_allow_9090_from_monitoring: true
+prometheus_firewall_allowed_ips: []
+prometheus_firewall_whitelist_ips: []
+```
 
-## License
-For open source projects, say how it is licensed.
+### Белый список IP для Prometheus
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+Создай файл:
+`group_vars/observation_servers/whitelist.yml`
+
+```yaml
+prometheus_firewall_whitelist_ips:
+  - <MONITORING_SERVER_IP>
+```
+
+Если список пустой, используется группа `monitoring_servers`.
+
+## Роль Loki
+
+### Что делает
+
+- Устанавливает Loki и promtail (binaries)
+- Создаёт пользователя/группу
+- Разворачивает конфиг и systemd unit
+- Проверяет readiness `/ready`
+- Настраивает firewall (nftables)
+
+### Основные переменные
+
+`roles/loki/defaults/main.yml`:
+
+```yaml
+loki_version: "2.9.6"
+loki_arch: "linux-amd64"
+loki_download_url: "https://github.com/grafana/loki/releases/download/v{{ loki_version }}/loki-{{ loki_arch }}.zip"
+
+loki_listen_address: "0.0.0.0:3100"
+
+promtail_version: "2.9.6"
+promtail_arch: "linux-amd64"
+promtail_download_url: "https://github.com/grafana/loki/releases/download/v{{ promtail_version }}/promtail-{{ promtail_arch }}.zip"
+
+loki_firewall_tcp_ports:
+  - 22
+  - 3100
+loki_firewall_allow_3100_from_monitoring: true
+loki_firewall_allowed_ips: []
+loki_firewall_whitelist_ips: []
+```
+
+### Белый список IP для Loki
+
+Файл:
+`group_vars/observation_servers/whitelist.yml`
+
+```yaml
+loki_firewall_whitelist_ips:
+  - <MONITORING_SERVER_IP>
+```
+
+Если список пустой, используется группа `monitoring_servers`.
+
+## Vault
+
+Админ-пароль Grafana хранится в vault:
+`inventories/group_vars/monitoring_servers/vault.yml`
+
+Пример содержимого:
+```yaml
+grafana_admin_password: "YourSecretPassword"
+```
+
+Запуск с вводом пароля:
+```bash
+ansible-playbook -i inventories/servers.yml playbooks/monitoring_server.yml --ask-vault-pass
+```
+
+## Плейбуки
+
+`playbooks/monitoring_server.yml` — Grafana
+
+`playbooks/observation_servers.yml` — Prometheus + Loki
+
+## Примечания
+
+- Grafana устанавливается через зеркало `mirrors.cernet.edu.cn` из-за блокировок прямого доступа.
+- Проверь DNS для домена Grafana и доступность 80/443, иначе Let's Encrypt не выдаст сертификат.
+- Для firewall убедись, что нужные IP указаны, иначе потеряешь доступ.

@@ -118,7 +118,9 @@
 
 - name: Build allowed IP list for Prometheus firewall
   ansible.builtin.set_fact:
-    prometheus_firewall_allowed_ips: "{{ groups['monitoring_servers'] | default([]) }}"
+    prometheus_firewall_allowed_ips: >-
+      {{ (prometheus_firewall_whitelist_ips | default([])) if (prometheus_firewall_whitelist_ips | length > 0)
+         else (groups['monitoring_servers'] | default([])) }}
   when:
     - prometheus_manage_firewall | default(false)
     - prometheus_firewall_allow_9090_from_monitoring | default(true)

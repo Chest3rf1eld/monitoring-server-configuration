@@ -20,6 +20,7 @@ prometheus_firewall_tcp_ports:
   - 9090
 prometheus_firewall_allow_9090_from_monitoring: true
 prometheus_firewall_allowed_ips: []
+prometheus_firewall_whitelist_ips: []
 
 # Feature toggles: enable/disable optional Prometheus tasks
 prometheus_enable_web_config: true

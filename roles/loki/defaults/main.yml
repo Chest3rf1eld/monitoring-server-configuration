@@ -19,3 +19,4 @@ loki_firewall_tcp_ports:
   - 3100
 loki_firewall_allow_3100_from_monitoring: true
 loki_firewall_allowed_ips: []
+loki_firewall_whitelist_ips: []

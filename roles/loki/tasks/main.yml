@@ -192,7 +192,9 @@
 
 - name: Build allowed IP list for Loki firewall
   ansible.builtin.set_fact:
-    loki_firewall_allowed_ips: "{{ groups['monitoring_servers'] | default([]) }}"
+    loki_firewall_allowed_ips: >-
+      {{ (loki_firewall_whitelist_ips | default([])) if (loki_firewall_whitelist_ips | length > 0)
+         else (groups['monitoring_servers'] | default([])) }}
   when: loki_firewall_allow_3100_from_monitoring | default(true)
 
 - name: Install nftables
