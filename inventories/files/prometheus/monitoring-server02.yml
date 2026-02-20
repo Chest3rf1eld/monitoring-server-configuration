@@ -17,3 +17,18 @@ scrape_configs:
     static_configs:
       - targets:
           - "<PROXY_IP_2>:9113"
+
+  - job_name: blackbox_exporter
+    metrics_path: /probe
+    params:
+      module: [crm_4_ru]
+    static_configs:
+      - targets:
+          - "https://<MONITORED_SITE_2>"
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: "127.0.0.1:9115"

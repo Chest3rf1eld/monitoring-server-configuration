@@ -8,3 +8,6 @@ loki_firewall_whitelist_ips:
   - <MONITORING_SERVER_IP>
   - <PROXY_IP_2>
   - <PROXY_IP_3>
+
+blackbox_firewall_whitelist_ips:
+  - <PROXY_IP_1>

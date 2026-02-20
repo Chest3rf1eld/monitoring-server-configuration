@@ -4,3 +4,4 @@
   roles:
     - prometheus
     - loki
+    - blackbox_exporter

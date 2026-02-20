@@ -79,6 +79,7 @@
   loop:
     - /etc/grafana/provisioning
     - /etc/grafana/provisioning/datasources
+    - /etc/grafana/provisioning/alerting
 
 - name: Provision Prometheus datasource
   ansible.builtin.template:
@@ -96,6 +97,22 @@
     owner: grafana
     group: grafana
     mode: "0644"
+  notify: restart grafana
+
+- name: Provision Grafana alerting config
+  ansible.builtin.copy:
+    src: "{{ lookup('ansible.builtin.first_found', params) }}"
+    dest: /etc/grafana/provisioning/alerting/alerts.yml
+    owner: grafana
+    group: grafana
+    mode: "0644"
+  vars:
+    params:
+      files:
+        - "{{ inventory_hostname }}.yml"
+        - default.yml
+      paths:
+        - "{{ inventory_dir }}/files/grafana/alerting"
   notify: restart grafana
 
 - name: Reload Grafana after provisioning
