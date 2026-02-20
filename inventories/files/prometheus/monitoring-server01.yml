@@ -16,8 +16,3 @@ scrape_configs:
     static_configs:
       - targets:
           - "<PROXY_IP_3>:9113"
-
-  - job_name: alloy
-    static_configs:
-      - targets:
-          - "<PROXY_IP_3>:12345"
