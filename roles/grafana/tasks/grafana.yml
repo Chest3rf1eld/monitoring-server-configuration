@@ -81,28 +81,33 @@
     - /etc/grafana/provisioning/datasources
     - /etc/grafana/provisioning/alerting
 
-- name: Provision Prometheus datasource
-  ansible.builtin.template:
-    src: provisioning/datasources/prometheus.yml.j2
-    dest: /etc/grafana/provisioning/datasources/prometheus.yml
-    owner: grafana
-    group: grafana
-    mode: "0644"
+- name: Find existing datasource provisioning files
+  ansible.builtin.find:
+    paths: /etc/grafana/provisioning/datasources
+    patterns:
+      - "*.yml"
+      - "*.yaml"
+    file_type: file
+  register: grafana_datasource_files
+
+- name: Remove stale datasource provisioning files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ grafana_datasource_files.files }}"
+  when: (item.path | basename) != "datasources.yml"
   notify: restart grafana
 
-- name: Provision Loki datasource
-  ansible.builtin.template:
-    src: provisioning/datasources/loki.yml.j2
-    dest: /etc/grafana/provisioning/datasources/loki.yml
-    owner: grafana
-    group: grafana
-    mode: "0644"
+- name: Remove alerting provisioning file (temporary safe mode)
+  ansible.builtin.file:
+    path: /etc/grafana/provisioning/alerting/alerts.yml
+    state: absent
   notify: restart grafana
 
-- name: Provision Grafana alerting config
+- name: Provision Grafana datasources config
   ansible.builtin.copy:
     src: "{{ lookup('ansible.builtin.first_found', params) }}"
-    dest: /etc/grafana/provisioning/alerting/alerts.yml
+    dest: /etc/grafana/provisioning/datasources/datasources.yml
     owner: grafana
     group: grafana
     mode: "0644"
@@ -112,7 +117,7 @@
         - "{{ inventory_hostname }}.yml"
         - default.yml
       paths:
-        - "{{ inventory_dir }}/files/grafana/alerting"
+        - "{{ inventory_dir }}/files/grafana/datasources"
   notify: restart grafana
 
 - name: Reload Grafana after provisioning

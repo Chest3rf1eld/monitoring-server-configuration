@@ -2,7 +2,7 @@ apiVersion: 1
 
 groups:
   - orgId: 1
-    name: host01-default
+    name: default
     folder: General
     interval: 1m
     rules: []
