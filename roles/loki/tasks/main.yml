@@ -9,13 +9,13 @@
 
 - name: Create Loki group
   ansible.builtin.group:
-    name: "{{ loki_group }}"
+    name: loki
     system: true
 
 - name: Create Loki user
   ansible.builtin.user:
-    name: "{{ loki_user }}"
-    group: "{{ loki_group }}"
+    name: loki
+    group: loki
     system: true
     create_home: false
     shell: /usr/sbin/nologin
@@ -24,18 +24,18 @@
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
-    owner: "{{ loki_user }}"
-    group: "{{ loki_group }}"
+    owner: loki
+    group: loki
     mode: "0755"
   loop:
-    - "{{ loki_config_dir }}"
-    - "{{ loki_data_dir }}"
-    - "{{ promtail_config_dir }}"
+    - /etc/loki
+    - /var/lib/loki
+    - /etc/promtail
     - /var/lib/promtail
 
 - name: Download Loki archive
   ansible.builtin.get_url:
-    url: "{{ loki_download_url }}"
+    url: "https://github.com/grafana/loki/releases/download/v{{ loki_version }}/loki-linux-amd64.zip"
     dest: "/tmp/loki-{{ loki_version }}.zip"
     mode: "0644"
 
@@ -68,13 +68,13 @@
         path: "{{ item }}"
       loop:
         - "{{ loki_bin_path }}"
-        - "{{ loki_install_dir }}/loki"
+        - /usr/local/bin/loki
       register: loki_bin_stats
 
     - name: Install Loki binary (only if changed)
       ansible.builtin.copy:
         src: "{{ loki_bin_path }}"
-        dest: "{{ loki_install_dir }}/loki"
+        dest: /usr/local/bin/loki
         mode: "0755"
         remote_src: true
       when: >
@@ -83,7 +83,7 @@
 
 - name: Download Promtail archive
   ansible.builtin.get_url:
-    url: "{{ promtail_download_url }}"
+    url: "https://github.com/grafana/loki/releases/download/v{{ promtail_version }}/promtail-linux-amd64.zip"
     dest: "/tmp/promtail-{{ promtail_version }}.zip"
     mode: "0644"
 
@@ -116,13 +116,13 @@
         path: "{{ item }}"
       loop:
         - "{{ promtail_bin_path }}"
-        - "{{ loki_install_dir }}/promtail"
+        - /usr/local/bin/promtail
       register: promtail_bin_stats
 
     - name: Install Promtail binary (only if changed)
       ansible.builtin.copy:
         src: "{{ promtail_bin_path }}"
-        dest: "{{ loki_install_dir }}/promtail"
+        dest: /usr/local/bin/promtail
         mode: "0755"
         remote_src: true
       when: >
@@ -132,18 +132,18 @@
 - name: Deploy Loki config
   ansible.builtin.template:
     src: loki.yml.j2
-    dest: "{{ loki_config_dir }}/loki.yml"
-    owner: "{{ loki_user }}"
-    group: "{{ loki_group }}"
+    dest: /etc/loki/loki.yml
+    owner: loki
+    group: loki
     mode: "0644"
   notify: restart loki
 
 - name: Deploy Promtail config
   ansible.builtin.template:
     src: promtail.yml.j2
-    dest: "{{ promtail_config_dir }}/promtail.yml"
-    owner: "{{ loki_user }}"
-    group: "{{ loki_group }}"
+    dest: /etc/promtail/promtail.yml
+    owner: loki
+    group: loki
     mode: "0644"
   notify: restart promtail
 
@@ -189,13 +189,6 @@
   retries: 10
   delay: 3
   until: loki_ready.status == 200
-
-- name: Build allowed IP list for Loki firewall
-  ansible.builtin.set_fact:
-    loki_firewall_allowed_ips: >-
-      {{ (loki_firewall_whitelist_ips | default([])) if (loki_firewall_whitelist_ips | length > 0)
-         else (groups['monitoring_servers'] | default([])) }}
-  when: loki_firewall_allow_3100_from_monitoring | default(true)
 
 - name: Install nftables
   ansible.builtin.apt:

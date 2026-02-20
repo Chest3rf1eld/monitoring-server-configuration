@@ -1,8 +1,1 @@
-basic_auth_users:
-{% if prometheus_basic_auth_users | length == 0 %}
-  {}
-{% else %}
-{% for user, password_hash in prometheus_basic_auth_users.items() %}
-  {{ user }}: "{{ password_hash }}"
-{% endfor %}
-{% endif %}
+basic_auth_users: {}

@@ -3,24 +3,24 @@
   ansible.builtin.apt:
     update_cache: true
     cache_valid_time: 3600
-  changed_when: false # директива чтобы ansible думал, что это задача не вносит изменений, как оно и есть на самом деле
+  changed_when: false
 
 - name: install nginx package
   ansible.builtin.apt:
     name: nginx
     state: present
-  
+
+- name: install certbot package
+  ansible.builtin.apt:
+    name: certbot
+    state: present
+  when: grafana_enable_https | bool
+
 - name: enable and start nginx
   ansible.builtin.service:
     name: nginx
     state: started
     enabled: true
-
-- name: Install Certbot
-  ansible.builtin.apt:
-    name: certbot
-    state: present
-  when: grafana_enable_https | bool
 
 - name: Create Let's Encrypt webroot
   ansible.builtin.file:
@@ -39,18 +39,6 @@
   ansible.builtin.set_fact:
     grafana_cert_exists: "{{ grafana_cert.stat.exists | default(false) }}"
   when: grafana_enable_https | bool
-
-- name: Ensure HTTPS config applied when certificate exists
-  ansible.builtin.template:
-    src: nginx-grafana.conf.j2
-    dest: /etc/nginx/sites-available/grafana.conf
-    mode: "0644"
-  vars:
-    grafana_cert_exists: "{{ grafana_cert_exists | default(false) }}"
-  notify: reload nginx
-  when:
-    - grafana_enable_https | bool
-    - grafana_cert_exists | default(false)
 
 - name: Configure Nginx reverse proxy for Grafana
   ansible.builtin.template:

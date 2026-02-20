@@ -13,7 +13,7 @@ table inet filter {
         ip protocol icmp accept
         ip6 nexthdr icmpv6 accept
 
-        tcp dport { {{ grafana_firewall_tcp_ports | join(', ') }} } accept
+        tcp dport { 22, 80, 443 } accept
     }
 
     chain forward {

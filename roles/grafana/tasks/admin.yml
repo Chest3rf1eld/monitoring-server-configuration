@@ -1,7 +1,7 @@
 ---
 - name: Check Grafana admin password marker
   ansible.builtin.stat:
-    path: "{{ grafana_admin_password_file }}"
+    path: /var/lib/grafana/.admin_password_set
   register: grafana_admin_marker
 
 - name: Set Grafana admin password
@@ -11,13 +11,13 @@
   changed_when: grafana_admin_reset.rc == 0
   when:
     - grafana_admin_password | length > 0
-    - grafana_admin_force_reset | default(false) or not grafana_admin_marker.stat.exists
+    - not grafana_admin_marker.stat.exists
 
 - name: Create Grafana admin password marker
   ansible.builtin.file:
-    path: "{{ grafana_admin_password_file }}"
+    path: /var/lib/grafana/.admin_password_set
     state: touch
     mode: "0600"
   when:
     - grafana_admin_password | length > 0
-    - grafana_admin_force_reset | default(false) or not grafana_admin_marker.stat.exists
+    - not grafana_admin_marker.stat.exists

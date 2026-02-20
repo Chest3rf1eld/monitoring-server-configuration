@@ -6,9 +6,19 @@ scrape_configs:
     static_configs:
       - targets:
           - "127.0.0.1:9090"
-{% if prometheus_enable_node_exporter %}
+
   - job_name: node_exporter
     static_configs:
       - targets:
           - "127.0.0.1:9100"
-{% endif %}
+          - "<PROXY_IP_2>:9100"
+
+  - job_name: nginx_exporter
+    static_configs:
+      - targets:
+          - "<PROXY_IP_2>:9113"
+
+  - job_name: alloy
+    static_configs:
+      - targets:
+          - "<PROXY_IP_2>:12345"

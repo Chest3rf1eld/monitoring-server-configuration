@@ -13,11 +13,11 @@ table inet filter {
         ip protocol icmp accept
         ip6 nexthdr icmpv6 accept
 
-{% if prometheus_firewall_allowed_ips | length > 0 %}
+        tcp dport 22 accept
+{% if prometheus_firewall_allowed_ips | default([]) | length > 0 %}
         tcp dport 9090 ip saddr { {{ prometheus_firewall_allowed_ips | join(', ') }} } accept
-        tcp dport { {{ prometheus_firewall_tcp_ports | reject('equalto', 9090) | list | join(', ') }} } accept
 {% else %}
-        tcp dport { {{ prometheus_firewall_tcp_ports | join(', ') }} } accept
+        tcp dport 9090 accept
 {% endif %}
     }
 

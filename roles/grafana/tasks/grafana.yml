@@ -3,7 +3,7 @@
   ansible.builtin.apt:
     update_cache: true
     cache_valid_time: 3600
-  changed_when: false # директива чтобы ansible думал, что это задача не вносит изменений, как оно и есть на самом деле
+  changed_when: false
 
 - name: Install Grafana APT prerequisites
   ansible.builtin.apt:
@@ -22,7 +22,7 @@
 
 - name: Install Grafana GPG key
   block:
-    - name: Check Grafana GPG key URL доступность
+    - name: Check Grafana GPG key URL availability
       ansible.builtin.uri:
         url: https://apt.grafana.com/gpg.key
         method: HEAD
@@ -33,7 +33,7 @@
       failed_when: false
       changed_when: false
 
-    - name: Download Grafana GPG key (primary)
+    - name: Download Grafana GPG key
       ansible.builtin.get_url:
         url: https://apt.grafana.com/gpg.key
         dest: /etc/apt/keyrings/grafana.gpg.asc
@@ -47,20 +47,6 @@
         /etc/apt/keyrings/grafana.gpg.asc
       changed_when: grafana_key_download.changed
       when: grafana_key_download is defined and grafana_key_download.changed | default(false)
-  rescue:
-    - name: Fetch Grafana GPG key from keyserver (fallback)
-      ansible.builtin.command: >
-        gpg --batch --keyserver hkps://keyserver.ubuntu.com
-        --recv-keys 963FA27710458545
-      changed_when: true
-
-    - name: Export Grafana GPG key to keyring (fallback)
-      ansible.builtin.shell: >
-        gpg --batch --export 963FA27710458545 |
-        gpg --dearmor --yes --output /etc/apt/keyrings/grafana.gpg
-      args:
-        executable: /bin/bash
-      changed_when: true
 
 - name: Add Grafana apt repository
   ansible.builtin.apt_repository:
@@ -93,16 +79,6 @@
   loop:
     - /etc/grafana/provisioning
     - /etc/grafana/provisioning/datasources
-
-- name: Build Prometheus URL from observation_servers group
-  ansible.builtin.set_fact:
-    grafana_prometheus_url: "http://{{ (groups['observation_servers'] | default([]) | first | default('localhost')) }}:9090"
-  when: grafana_prometheus_url is not defined or grafana_prometheus_url == ""
-
-- name: Build Loki URL from observation_servers group
-  ansible.builtin.set_fact:
-    grafana_loki_url: "http://{{ (groups['observation_servers'] | default([]) | first | default('localhost')) }}:3100"
-  when: grafana_loki_url is not defined or grafana_loki_url == ""
 
 - name: Provision Prometheus datasource
   ansible.builtin.template:

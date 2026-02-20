@@ -1,7 +1,10 @@
 ---
 prometheus_firewall_whitelist_ips:
+  - <PROXY_IP_4> #<USER> proxy ip
   - <MONITORING_SERVER_IP>
 
 loki_firewall_whitelist_ips:
+  - <PROXY_IP_4> #<USER> proxy ip 
   - <MONITORING_SERVER_IP>
   - <PROXY_IP_2>
+  - <PROXY_IP_3>

@@ -4,10 +4,10 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
-User={{ loki_user }}
-Group={{ loki_group }}
+User=loki
+Group=loki
 Type=simple
-ExecStart={{ loki_install_dir }}/promtail -config.file={{ promtail_config_dir }}/promtail.yml
+ExecStart=/usr/local/bin/promtail -config.file=/etc/promtail/promtail.yml
 Restart=on-failure
 
 [Install]
