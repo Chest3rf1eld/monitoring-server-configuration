@@ -2,7 +2,55 @@ apiVersion: 1
 
 groups:
   - orgId: 1
-    name: default
+    name: website-availability
     folder: General
     interval: 1m
-    rules: []
+    rules:
+      - uid: cfdtg11sx1kowa
+        title: <MONITORED_SITE> access alert
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prom_host01
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: prometheus
+                uid: prom_host01
+              editorMode: code
+              expr: probe_success{job="blackbox_exporter",instance="https://<MONITORED_SITE>"}
+              hide: false
+              instant: true
+              interval: ""
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: A
+              type: classic_conditions
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 5m
+        keepFiringFor: 5m
+        annotations:
+          summary: <MONITORED_SITE> is unavailable from monitoring-server01
+        labels:
+          severity: critical
+          site: <MONITORED_SITE>
+        isPaused: false

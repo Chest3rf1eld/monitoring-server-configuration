@@ -98,9 +98,32 @@
   when: (item.path | basename) != "datasources.yml"
   notify: restart grafana
 
-- name: Remove alerting provisioning file (temporary safe mode)
+- name: Find existing alerting provisioning files
+  ansible.builtin.find:
+    paths: /etc/grafana/provisioning/alerting
+    patterns:
+      - "*.yml"
+      - "*.yaml"
+    file_type: file
+  register: grafana_alerting_files
+
+- name: Remove stale alerting provisioning files
   ansible.builtin.file:
-    path: /etc/grafana/provisioning/alerting/alerts.yml
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ grafana_alerting_files.files }}"
+  when: (item.path | basename) != "provision.yml"
+  notify: restart grafana
+
+- name: Remove alerting provisioning file (temporary disabled)
+  ansible.builtin.file:
+    path: /etc/grafana/provisioning/alerting/provision.yml
+    state: absent
+  notify: restart grafana
+
+- name: Remove disabled alerting provisioning file (temporary disabled)
+  ansible.builtin.file:
+    path: /etc/grafana/provisioning/alerting/provision.yml.disabled
     state: absent
   notify: restart grafana
 
