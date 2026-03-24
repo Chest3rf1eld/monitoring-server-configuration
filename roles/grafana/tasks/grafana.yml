@@ -69,6 +69,22 @@
     state: started
     enabled: true
 
+- name: Configure Grafana public server settings
+  ansible.builtin.ini_file:
+    path: /etc/grafana/grafana.ini
+    section: server
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+    mode: "0644"
+  loop:
+    - option: domain
+      value: "{{ grafana_domain }}"
+    - option: root_url
+      value: "{{ ('https' if grafana_enable_https else 'http') }}://{{ grafana_domain }}/"
+    - option: serve_from_sub_path
+      value: "false"
+  notify: restart grafana
+
 - name: Ensure Grafana provisioning directories
   ansible.builtin.file:
     path: "{{ item }}"

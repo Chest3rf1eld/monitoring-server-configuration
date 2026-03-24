@@ -8,7 +8,7 @@ groups:
     rules:
       - uid: cfdtg11sx1kowa
         title: <MONITORED_SITE> unavailable
-        condition: A
+        condition: C
         data:
           - refId: A
             relativeTimeRange:
@@ -16,20 +16,6 @@ groups:
               to: 0
             datasourceUid: prom_host01
             model:
-              conditions:
-                - evaluator:
-                    params:
-                      - 1
-                    type: lt
-                  operator:
-                    type: and
-                  query:
-                    params:
-                      - A
-                  reducer:
-                    params: []
-                    type: last
-                  type: query
               datasource:
                 type: prometheus
                 uid: prom_host01
@@ -43,14 +29,58 @@ groups:
               maxDataPoints: 43200
               range: false
               refId: A
-              type: classic_conditions
+          - refId: B
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              settings:
+                mode: dropNN
+              type: reduce
+          - refId: C
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - B
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
         noDataState: Alerting
         execErrState: Alerting
         for: 5m
         keepFiringFor: 5m
         annotations:
-          summary: Сайт <MONITORED_SITE> недоступен с точки наблюдения monitoring-server01
-          description: Blackbox probe фиксирует probe_success < 1 в течение 5 минут для https://<MONITORED_SITE>
+          summary: <MONITORED_SITE> недоступен
+          description: Сайт https://<MONITORED_SITE> недоступен более 5 минут с точки наблюдения monitoring-server01
         labels:
           severity: critical
           site: <MONITORED_SITE>
