@@ -1,0 +1,137 @@
+---
+- name: Install blackbox_exporter dependencies
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - tar
+    state: present
+
+- name: Create blackbox_exporter group
+  ansible.builtin.group:
+    name: blackbox
+    system: true
+
+- name: Create blackbox_exporter user
+  ansible.builtin.user:
+    name: blackbox
+    group: blackbox
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+
+- name: Create blackbox_exporter config directory
+  ansible.builtin.file:
+    path: /etc/blackbox_exporter
+    state: directory
+    owner: blackbox
+    group: blackbox
+    mode: "0755"
+
+- name: Download blackbox_exporter archive
+  ansible.builtin.get_url:
+    url: "https://github.com/prometheus/blackbox_exporter/releases/download/v{{ blackbox_exporter_version }}/blackbox_exporter-{{ blackbox_exporter_version }}.linux-amd64.tar.gz"
+    dest: "/tmp/blackbox_exporter-{{ blackbox_exporter_version }}.tar.gz"
+    mode: "0644"
+
+- name: Extract blackbox_exporter archive
+  ansible.builtin.unarchive:
+    src: "/tmp/blackbox_exporter-{{ blackbox_exporter_version }}.tar.gz"
+    dest: /tmp
+    remote_src: true
+
+- name: Install blackbox_exporter binary
+  ansible.builtin.copy:
+    src: "/tmp/blackbox_exporter-{{ blackbox_exporter_version }}.linux-amd64/blackbox_exporter"
+    dest: /usr/local/bin/blackbox_exporter
+    mode: "0755"
+    remote_src: true
+
+- name: Deploy blackbox_exporter config
+  ansible.builtin.copy:
+    src: "{{ lookup('ansible.builtin.first_found', params) }}"
+    dest: /etc/blackbox_exporter/blackbox.yml
+    owner: blackbox
+    group: blackbox
+    mode: "0644"
+  vars:
+    params:
+      files:
+        - "{{ inventory_hostname }}.yml"
+        - default.yml
+      paths:
+        - "{{ inventory_dir }}/files/blackbox_exporter"
+  notify: restart blackbox_exporter
+
+- name: Install blackbox_exporter systemd unit
+  ansible.builtin.template:
+    src: blackbox_exporter.service.j2
+    dest: /etc/systemd/system/blackbox_exporter.service
+    mode: "0644"
+  notify:
+    - reload systemd
+    - restart blackbox_exporter
+
+- name: Reload systemd after unit change
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start blackbox_exporter
+  ansible.builtin.service:
+    name: blackbox_exporter
+    state: started
+    enabled: true
+
+- name: Wait for blackbox_exporter readiness
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:9115/metrics"
+    return_content: false
+    status_code: 200
+  register: blackbox_ready
+  retries: 10
+  delay: 3
+  until: blackbox_ready.status == 200
+
+- name: Build allowed IP list for Prometheus GUI
+  ansible.builtin.set_fact:
+    prometheus_firewall_allowed_ips: >-
+      {{ (prometheus_firewall_whitelist_ips | default([]))
+         if (prometheus_firewall_whitelist_ips | default([]) | length > 0)
+         else ((groups['observation_servers'] | default([]))
+         | map('extract', hostvars)
+         | map(attribute='ansible_host')
+         | list) }}
+
+- name: Build allowed IP list for Loki
+  ansible.builtin.set_fact:
+    loki_firewall_allowed_ips: >-
+      {{ (loki_firewall_whitelist_ips | default([]))
+         if (loki_firewall_whitelist_ips | default([]) | length > 0)
+         else ((groups['observation_servers'] | default([]))
+         | map('extract', hostvars)
+         | map(attribute='ansible_host')
+         | list) }}
+
+- name: Build allowed IP list for blackbox_exporter
+  ansible.builtin.set_fact:
+    blackbox_firewall_allowed_ips: >-
+      {{ (blackbox_firewall_whitelist_ips | default([]))
+         if (blackbox_firewall_whitelist_ips | default([]) | length > 0)
+         else (prometheus_firewall_whitelist_ips | default([])) }}
+
+- name: Install nftables
+  ansible.builtin.apt:
+    name: nftables
+    state: present
+
+- name: Deploy nftables configuration
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
+    mode: "0644"
+  notify: apply nftables
+
+- name: Enable and start nftables
+  ansible.builtin.service:
+    name: nftables
+    state: started
+    enabled: true

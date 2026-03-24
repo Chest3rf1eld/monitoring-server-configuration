@@ -4,10 +4,10 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
-User={{ prometheus_user }}
-Group={{ prometheus_group }}
+User=prometheus
+Group=prometheus
 Type=simple
-ExecStart={{ prometheus_install_dir }}/node_exporter
+ExecStart=/usr/local/bin/node_exporter
 Restart=on-failure
 
 [Install]

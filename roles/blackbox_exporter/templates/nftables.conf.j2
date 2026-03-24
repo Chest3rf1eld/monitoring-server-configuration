@@ -16,8 +16,12 @@ table inet filter {
         tcp dport 22 accept
 {% if prometheus_firewall_allowed_ips | default([]) | length > 0 %}
         tcp dport 9090 ip saddr { {{ prometheus_firewall_allowed_ips | join(', ') }} } accept
-{% else %}
-        tcp dport 9090 accept
+{% endif %}
+{% if loki_firewall_allowed_ips | default([]) | length > 0 %}
+        tcp dport 3100 ip saddr { {{ loki_firewall_allowed_ips | join(', ') }} } accept
+{% endif %}
+{% if blackbox_firewall_allowed_ips | default([]) | length > 0 %}
+        tcp dport 9115 ip saddr { {{ blackbox_firewall_allowed_ips | join(', ') }} } accept
 {% endif %}
     }
 

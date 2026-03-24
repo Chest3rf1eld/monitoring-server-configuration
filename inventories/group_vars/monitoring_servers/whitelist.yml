@@ -1,0 +1,13 @@
+---
+prometheus_firewall_whitelist_ips:
+  - <PROXY_IP_1> #<USER> proxy ip
+  - <MONITORING_SERVER_IP>
+
+loki_firewall_whitelist_ips:
+  - <PROXY_IP_1> #<USER> proxy ip 
+  - <MONITORING_SERVER_IP>
+  - <PROXY_IP_2>
+  - <PROXY_IP_3>
+
+blackbox_firewall_whitelist_ips:
+  - <PROXY_IP_1>

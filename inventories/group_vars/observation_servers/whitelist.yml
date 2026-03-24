@@ -1,7 +1,0 @@
----
-prometheus_firewall_whitelist_ips:
-  - <MONITORING_SERVER_IP>
-
-loki_firewall_whitelist_ips:
-  - <MONITORING_SERVER_IP>
-  - <PROXY_IP_2>

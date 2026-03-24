@@ -1,15 +1,15 @@
 auth_enabled: false
 
 server:
-  http_listen_address: {{ loki_listen_address.split(':')[0] }}
-  http_listen_port: {{ loki_listen_address.split(':')[1] | int }}
+  http_listen_address: 0.0.0.0
+  http_listen_port: 3100
 
 common:
-  path_prefix: {{ loki_data_dir }}
+  path_prefix: /var/lib/loki
   storage:
     filesystem:
-      chunks_directory: {{ loki_data_dir }}/chunks
-      rules_directory: {{ loki_data_dir }}/rules
+      chunks_directory: /var/lib/loki/chunks
+      rules_directory: /var/lib/loki/rules
   replication_factor: 1
   ring:
     kvstore:
@@ -27,11 +27,11 @@ schema_config:
 
 storage_config:
   boltdb_shipper:
-    active_index_directory: {{ loki_data_dir }}/index
-    cache_location: {{ loki_data_dir }}/cache
+    active_index_directory: /var/lib/loki/index
+    cache_location: /var/lib/loki/cache
     shared_store: filesystem
   filesystem:
-    directory: {{ loki_data_dir }}/chunks
+    directory: /var/lib/loki/chunks
 
 limits_config:
   per_stream_rate_limit: 10MB

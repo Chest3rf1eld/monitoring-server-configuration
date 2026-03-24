@@ -1,0 +1,17 @@
+---
+prometheus_prometheus_targets:
+  - "127.0.0.1:9090"
+
+prometheus_node_exporter_targets:
+  - "127.0.0.1:9090"
+  - "<PROXY_IP_3>:9100"
+
+prometheus_extra_scrape_jobs:
+  - job_name: nginx_exporter
+    static_configs:
+      - targets:
+          - "<PROXY_IP_3>:9113"
+  - job_name: alloy
+    static_configs:
+      - targets:
+          - "<PROXY_IP_3>:12345"

@@ -1,7 +1,7 @@
 ---
 - name: Download node_exporter archive
   ansible.builtin.get_url:
-    url: "{{ node_exporter_download_url }}"
+    url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
     dest: "/tmp/node_exporter-{{ node_exporter_version }}.tar.gz"
     mode: "0644"
 
@@ -13,8 +13,8 @@
 
 - name: Install node_exporter binary
   ansible.builtin.copy:
-    src: "/tmp/node_exporter-{{ node_exporter_version }}.{{ node_exporter_arch }}/node_exporter"
-    dest: "{{ prometheus_install_dir }}/node_exporter"
+    src: "/tmp/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter"
+    dest: /usr/local/bin/node_exporter
     mode: "0755"
     remote_src: true
 

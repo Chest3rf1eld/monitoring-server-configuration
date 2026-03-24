@@ -1,0 +1,3 @@
+---
+blackbox_exporter_version: "0.25.0"
+blackbox_firewall_whitelist_ips: []

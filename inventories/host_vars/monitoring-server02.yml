@@ -1,0 +1,6 @@
+---
+prometheus_prometheus_targets:
+  - "127.0.0.1:9090"
+
+prometheus_node_exporter_targets:
+  - "127.0.0.1:9100"

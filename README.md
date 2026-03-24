@@ -24,12 +24,12 @@ all:
   vars:
     ssh_key_path: /home/<USER>/.ssh/<SSH_KEY>
   children:
-    monitoring_servers:
+    observation_servers:
       hosts:
         <MONITORING_SERVER_IP>:
           ansible_user: <ANSIBLE_USER>
           ansible_ssh_private_key_file: "{{ ssh_key_path }}"
-    observation_servers:
+    monitoring_servers:
       hosts:
         <OBSERVATION_SERVER_IP>:
           ansible_user: <ANSIBLE_USER>
@@ -45,7 +45,7 @@ ansible-playbook -i inventories/servers.yml playbooks/monitoring_server.yml --as
 
 Prometheus + Loki (observation сервер):
 ```bash
-ansible-playbook -i inventories/servers.yml playbooks/observation_servers.yml
+ansible-playbook -i inventories/servers.yml playbooks/monitoring_servers.yml
 ```
 
 ## Роль Grafana
@@ -97,7 +97,7 @@ Datasource файлы появляются на сервере тут:
 - `/etc/grafana/provisioning/datasources/prometheus.yml`
 - `/etc/grafana/provisioning/datasources/loki.yml`
 
-По умолчанию IP берётся из группы `observation_servers`.
+По умолчанию IP берётся из группы `monitoring_servers`.
 
 ## Роль Prometheus
 
@@ -125,6 +125,11 @@ prometheus_web_config_file: "{{ prometheus_config_dir }}/web.yml"
 prometheus_basic_auth_users: {}
 
 prometheus_enable_node_exporter: true
+prometheus_prometheus_targets:
+  - "127.0.0.1:9090"
+prometheus_node_exporter_targets:
+  - "127.0.0.1:9100"
+prometheus_extra_scrape_jobs: []
 
 prometheus_manage_firewall: true
 prometheus_firewall_tcp_ports:
@@ -135,17 +140,42 @@ prometheus_firewall_allowed_ips: []
 prometheus_firewall_whitelist_ips: []
 ```
 
+### Разные targets для разных хостов
+
+Задай переменные в `inventories/host_vars/<ip>.yml`, например:
+
+```yaml
+prometheus_prometheus_targets:
+  - "127.0.0.1:9090"
+  - "10.10.10.11:9090"
+
+prometheus_node_exporter_targets:
+  - "127.0.0.1:9100"
+  - "10.10.10.11:9100"
+  - "10.10.10.12:9100"
+
+prometheus_extra_scrape_jobs:
+  - job_name: nginx_exporter
+    static_configs:
+      - targets:
+          - "10.10.10.11:9113"
+  - job_name: alloy
+    static_configs:
+      - targets:
+          - "10.10.10.11:12345"
+```
+
 ### Белый список IP для Prometheus
 
 Создай файл:
-`group_vars/observation_servers/whitelist.yml`
+`group_vars/monitoring_servers/whitelist.yml`
 
 ```yaml
 prometheus_firewall_whitelist_ips:
   - <MONITORING_SERVER_IP>
 ```
 
-Если список пустой, используется группа `monitoring_servers`.
+Если список пустой, используется группа `observation_servers`.
 
 ## Роль Loki
 
@@ -183,19 +213,19 @@ loki_firewall_whitelist_ips: []
 ### Белый список IP для Loki
 
 Файл:
-`group_vars/observation_servers/whitelist.yml`
+`group_vars/monitoring_servers/whitelist.yml`
 
 ```yaml
 loki_firewall_whitelist_ips:
   - <MONITORING_SERVER_IP>
 ```
 
-Если список пустой, используется группа `monitoring_servers`.
+Если список пустой, используется группа `observation_servers`.
 
 ## Vault
 
 Админ-пароль Grafana хранится в vault:
-`inventories/group_vars/monitoring_servers/vault.yml`
+`inventories/group_vars/observation_servers/vault.yml`
 
 Пример содержимого:
 ```yaml
@@ -211,7 +241,7 @@ ansible-playbook -i inventories/servers.yml playbooks/monitoring_server.yml --as
 
 `playbooks/monitoring_server.yml` — Grafana
 
-`playbooks/observation_servers.yml` — Prometheus + Loki
+`playbooks/monitoring_servers.yml` — Prometheus + Loki
 
 ## Примечания
 

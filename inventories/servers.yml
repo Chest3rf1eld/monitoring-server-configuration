@@ -2,13 +2,19 @@ all:
   vars:
     ssh_key_path: /home/<USER>/.ssh/<SSH_KEY>
   children:
-    monitoring_servers:
-      hosts:
-        <MONITORING_SERVER_IP>:
-          ansible_user: <ANSIBLE_USER>
-          ansible_ssh_private_key_file: "{{ ssh_key_path }}"
     observation_servers:
       hosts:
-        <OBSERVATION_SERVER_IP>:
+        grafana01:
+          ansible_host: <MONITORING_SERVER_IP>
+          ansible_user: <ANSIBLE_USER>
+          ansible_ssh_private_key_file: "{{ ssh_key_path }}"
+    monitoring_servers:
+      hosts:
+        monitoring-server02:
+          ansible_host: <OBSERVATION_SERVER_IP>
+          ansible_user: <ANSIBLE_USER>
+          ansible_ssh_private_key_file: "{{ ssh_key_path }}"
+        monitoring-server01:
+          ansible_host: <PROXY_SERVER_IP>
           ansible_user: <ANSIBLE_USER>
           ansible_ssh_private_key_file: "{{ ssh_key_path }}"

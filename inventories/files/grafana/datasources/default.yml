@@ -1,0 +1,42 @@
+apiVersion: 1
+prune: true
+
+deleteDatasources:
+  - name: monitoring-server02
+    orgId: 1
+  - name: monitoring-server01
+    orgId: 1
+  - name: loki-monitoring-server02
+    orgId: 1
+  - name: loki-monitoring-server01
+    orgId: 1
+
+datasources:
+  - name: monitoring-server02
+    uid: prom_host02
+    type: prometheus
+    access: proxy
+    url: http://<OBSERVATION_SERVER_IP>:9090
+    isDefault: false
+    editable: false
+  - name: monitoring-server01
+    uid: prom_host01
+    type: prometheus
+    access: proxy
+    url: http://<PROXY_SERVER_IP>:9090
+    isDefault: true
+    editable: false
+  - name: loki-monitoring-server02
+    uid: loki_host02
+    type: loki
+    access: proxy
+    url: http://<OBSERVATION_SERVER_IP>:3100
+    isDefault: false
+    editable: false
+  - name: loki-monitoring-server01
+    uid: loki_host01
+    type: loki
+    access: proxy
+    url: http://<PROXY_SERVER_IP>:3100
+    isDefault: false
+    editable: false

@@ -1,22 +1,3 @@
 ---
 loki_version: "2.9.6"
-loki_arch: "linux-amd64"
-loki_download_url: "https://github.com/grafana/loki/releases/download/v{{ loki_version }}/loki-{{ loki_arch }}.zip"
-loki_user: loki
-loki_group: loki
-loki_install_dir: /usr/local/bin
-loki_config_dir: /etc/loki
-loki_data_dir: /var/lib/loki
-loki_listen_address: "0.0.0.0:3100"
-
 promtail_version: "2.9.6"
-promtail_arch: "linux-amd64"
-promtail_download_url: "https://github.com/grafana/loki/releases/download/v{{ promtail_version }}/promtail-{{ promtail_arch }}.zip"
-promtail_config_dir: /etc/promtail
-
-loki_firewall_tcp_ports:
-  - 22
-  - 3100
-loki_firewall_allow_3100_from_monitoring: true
-loki_firewall_allowed_ips: []
-loki_firewall_whitelist_ips: []

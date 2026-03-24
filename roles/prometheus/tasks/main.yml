@@ -9,13 +9,13 @@
 
 - name: Create Prometheus group
   ansible.builtin.group:
-    name: "{{ prometheus_group }}"
+    name: prometheus
     system: true
 
 - name: Create Prometheus user
   ansible.builtin.user:
-    name: "{{ prometheus_user }}"
-    group: "{{ prometheus_group }}"
+    name: prometheus
+    group: prometheus
     system: true
     create_home: false
     shell: /usr/sbin/nologin
@@ -24,16 +24,16 @@
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
-    owner: "{{ prometheus_user }}"
-    group: "{{ prometheus_group }}"
+    owner: prometheus
+    group: prometheus
     mode: "0755"
   loop:
-    - "{{ prometheus_config_dir }}"
-    - "{{ prometheus_data_dir }}"
+    - /etc/prometheus
+    - /var/lib/prometheus
 
 - name: Download Prometheus archive
   ansible.builtin.get_url:
-    url: "{{ prometheus_download_url }}"
+    url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
     dest: "/tmp/prometheus-{{ prometheus_version }}.tar.gz"
     mode: "0644"
 
@@ -45,8 +45,8 @@
 
 - name: Install Prometheus binaries
   ansible.builtin.copy:
-    src: "/tmp/prometheus-{{ prometheus_version }}.{{ prometheus_arch }}/{{ item }}"
-    dest: "{{ prometheus_install_dir }}/{{ item }}"
+    src: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
     mode: "0755"
     remote_src: true
   loop:
@@ -55,10 +55,10 @@
 
 - name: Install Prometheus console templates
   ansible.builtin.copy:
-    src: "/tmp/prometheus-{{ prometheus_version }}.{{ prometheus_arch }}/{{ item }}"
-    dest: "{{ prometheus_config_dir }}/{{ item }}"
-    owner: "{{ prometheus_user }}"
-    group: "{{ prometheus_group }}"
+    src: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64/{{ item }}"
+    dest: "/etc/prometheus/{{ item }}"
+    owner: prometheus
+    group: prometheus
     mode: "0755"
     remote_src: true
   loop:
@@ -66,22 +66,28 @@
     - console_libraries
 
 - name: Deploy Prometheus config
-  ansible.builtin.template:
-    src: prometheus.yml.j2
-    dest: "{{ prometheus_config_dir }}/prometheus.yml"
-    owner: "{{ prometheus_user }}"
-    group: "{{ prometheus_group }}"
+  ansible.builtin.copy:
+    src: "{{ lookup('ansible.builtin.first_found', params) }}"
+    dest: /etc/prometheus/prometheus.yml
+    owner: prometheus
+    group: prometheus
     mode: "0644"
+  vars:
+    params:
+      files:
+        - "{{ inventory_hostname }}.yml"
+        - default.yml
+      paths:
+        - "{{ inventory_dir }}/files/prometheus"
   notify: restart prometheus
 
-- name: Deploy Prometheus web config (optional)
+- name: Deploy Prometheus web config
   ansible.builtin.template:
     src: web.yml.j2
-    dest: "{{ prometheus_web_config_file }}"
-    owner: "{{ prometheus_user }}"
-    group: "{{ prometheus_group }}"
+    dest: /etc/prometheus/web.yml
+    owner: prometheus
+    group: prometheus
     mode: "0640"
-  when: prometheus_enable_web_config | bool
   notify: restart prometheus
 
 - name: Install Prometheus systemd unit
@@ -95,6 +101,11 @@
 
 - name: Reload systemd after unit change
   ansible.builtin.meta: flush_handlers
+
+- name: Validate Prometheus configuration
+  ansible.builtin.command:
+    cmd: /usr/local/bin/promtool check config /etc/prometheus/prometheus.yml
+  changed_when: false
 
 - name: Enable and start Prometheus
   ansible.builtin.service:
@@ -114,17 +125,16 @@
 
 - name: Install and configure node_exporter
   ansible.builtin.include_tasks: node_exporter.yml
-  when: prometheus_enable_node_exporter | bool
 
-- name: Build allowed IP list for Prometheus firewall
+- name: Build allowed IP list for Prometheus GUI
   ansible.builtin.set_fact:
     prometheus_firewall_allowed_ips: >-
-      {{ (prometheus_firewall_whitelist_ips | default([])) if (prometheus_firewall_whitelist_ips | length > 0)
-         else (groups['monitoring_servers'] | default([])) }}
-  when:
-    - prometheus_manage_firewall | default(false)
-    - prometheus_firewall_allow_9090_from_monitoring | default(true)
+      {{ (prometheus_firewall_whitelist_ips | default([]))
+         if (prometheus_firewall_whitelist_ips | default([]) | length > 0)
+         else ((groups['observation_servers'] | default([]))
+         | map('extract', hostvars)
+         | map(attribute='ansible_host')
+         | list) }}
 
 - name: Configure firewall with nftables
   ansible.builtin.include_tasks: firewall.yml
-  when: prometheus_manage_firewall | default(false)

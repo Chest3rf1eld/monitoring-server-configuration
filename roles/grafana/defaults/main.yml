@@ -1,23 +1,7 @@
 ---
+grafana_admin_password: ""
 grafana_domain: <GRAFANA_DOMAIN>
 grafana_enable_https: true
-grafana_letsencrypt_email: "admin@{{ grafana_domain }}"
+grafana_letsencrypt_email: "admin@<GRAFANA_DOMAIN>"
 grafana_letsencrypt_webroot: /var/www/letsencrypt
-grafana_firewall_tcp_ports:
-  - 22
-  - 80
-  - 8080
-  - 443
-  - 9090
-  - 3100
-grafana_admin_password: ""
-grafana_admin_password_file: /var/lib/grafana/.admin_password_set
-grafana_prometheus_url: ""
-grafana_prometheus_datasource_name: "Prometheus"
-grafana_loki_url: ""
-grafana_loki_datasource_name: "Loki"
-
-# Feature toggles: enable/disable optional Grafana tasks
-grafana_install_nginx: true
-grafana_enable_firewall: true
-grafana_admin_force_reset: false
+grafana_manage_alerting_provisioning: true
