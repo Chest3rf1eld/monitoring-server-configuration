@@ -7,7 +7,7 @@ groups:
     interval: 1m
     rules:
       - uid: cfdtg11sx1kowa
-        title: <MONITORED_SITE> access alert
+        title: <MONITORED_SITE> unavailable
         condition: A
         data:
           - refId: A
@@ -49,7 +49,8 @@ groups:
         for: 5m
         keepFiringFor: 5m
         annotations:
-          summary: <MONITORED_SITE> is unavailable from monitoring-server01
+          summary: Сайт <MONITORED_SITE> недоступен с точки наблюдения monitoring-server01
+          description: Blackbox probe фиксирует probe_success < 1 в течение 5 минут для https://<MONITORED_SITE>
         labels:
           severity: critical
           site: <MONITORED_SITE>
