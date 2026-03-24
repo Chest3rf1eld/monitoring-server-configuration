@@ -119,12 +119,30 @@
   ansible.builtin.file:
     path: /etc/grafana/provisioning/alerting/provision.yml
     state: absent
+  when: not grafana_manage_alerting_provisioning
   notify: restart grafana
 
 - name: Remove disabled alerting provisioning file (temporary disabled)
   ansible.builtin.file:
     path: /etc/grafana/provisioning/alerting/provision.yml.disabled
     state: absent
+  notify: restart grafana
+
+- name: Provision Grafana alerting config
+  ansible.builtin.copy:
+    src: "{{ lookup('ansible.builtin.first_found', params) }}"
+    dest: /etc/grafana/provisioning/alerting/provision.yml
+    owner: grafana
+    group: grafana
+    mode: "0644"
+  vars:
+    params:
+      files:
+        - "{{ inventory_hostname }}.yml"
+        - default.yml
+      paths:
+        - "{{ inventory_dir }}/files/grafana/alerting"
+  when: grafana_manage_alerting_provisioning
   notify: restart grafana
 
 - name: Provision Grafana datasources config

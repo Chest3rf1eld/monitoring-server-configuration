@@ -4,3 +4,4 @@ grafana_domain: <GRAFANA_DOMAIN>
 grafana_enable_https: true
 grafana_letsencrypt_email: "admin@<GRAFANA_DOMAIN>"
 grafana_letsencrypt_webroot: /var/www/letsencrypt
+grafana_manage_alerting_provisioning: true
