@@ -1,24 +1,42 @@
-# monitoring server configuration
+[Read this in Russian](README.ru.md)
 
-Этот репозиторий содержит роли Ansible для развёртывания:
-- Grafana (с nginx reverse proxy, Let's Encrypt, provisioning data sources)
-- Prometheus (опционально node_exporter, web config)
-- Loki (с promtail)
-- nftables (минимальные правила)
+# monitoring-server-configuration
 
-## Структура
+Ansible playbooks and roles that deploy a small distributed monitoring stack:
 
-- `roles/grafana` — установка Grafana + nginx + TLS + provisioning
-- `roles/prometheus` — установка Prometheus + node_exporter + firewall
-- `roles/loki` — установка Loki + promtail + firewall
-- `inventories/` — инвентори и group_vars
-- `playbooks/` — плейбуки окружений
+- **Grafana** behind an nginx reverse proxy with Let's Encrypt TLS, with datasources and alert rules provisioned from static YAML files.
+- **Prometheus** + **node_exporter**, on each monitored server.
+- **blackbox_exporter**, on each monitored server, for external HTTP probes (e.g. "is this website up").
+- **Loki** + **promtail**, on each monitored server, for log shipping.
+- **nftables** firewall rules, deployed by every role.
 
-## Быстрый старт
+## Architecture
 
-1. Заполни инвентори
+The inventory has two groups, and they are not what the names might suggest at first glance:
 
-`inventories/servers.yml`:
+- `observation_servers` — the server(s) where **Grafana** runs. This is where you *observe* dashboards and alerts.
+- `monitoring_servers` — the server(s) that are *being monitored*. Each one runs its own local Prometheus, node_exporter, blackbox_exporter and Loki/promtail.
+
+There is no central Prometheus/Loki server. Instead, Grafana (on `observation_servers`) is provisioned with one Prometheus datasource and one Loki datasource *per monitoring server*, pointed at that server's public IP (see `inventories/files/grafana/datasources/`). Each monitoring server is therefore self-contained: it scrapes its own `node_exporter`/`blackbox_exporter`, ships its own logs, and only Grafana talks to it remotely.
+
+`playbooks/observation_servers.yml` targets `observation_servers` and runs the `grafana` role.
+`playbooks/monitoring_servers.yml` targets `monitoring_servers` and runs `prometheus`, `loki`, then `blackbox_exporter`, in that order.
+
+## Repository Layout
+
+- `ansible.cfg` — sets `roles_path = ./roles` and disables SSH host key checking. No default inventory is configured, so `-i` must always be passed explicitly.
+- `inventories/servers.yml` — the inventory: hosts, groups, SSH connection details.
+- `inventories/group_vars/monitoring_servers/whitelist.yml` — firewall allow-lists (`prometheus_firewall_whitelist_ips`, `loki_firewall_whitelist_ips`, `blackbox_firewall_whitelist_ips`).
+- `inventories/group_vars/observation_servers/vault.yml` — ansible-vault-encrypted secrets (`grafana_admin_password`).
+- `inventories/host_vars/<host>.yml` — per-host variables.
+- `inventories/files/<role>/<inventory_hostname>.yml` (with a `default.yml` fallback) — static, hand-edited config files: Prometheus scrape configs, blackbox_exporter probe modules, Grafana datasources and alert rules. These are copied to the target as-is; they are **not** Jinja templates and are **not** generated from role variables.
+- `playbooks/observation_servers.yml`, `playbooks/monitoring_servers.yml` — the two playbooks.
+- `roles/grafana`, `roles/prometheus`, `roles/loki`, `roles/blackbox_exporter` — the four roles.
+
+## Quick Start
+
+1. Fill in `inventories/servers.yml`, for example:
+
 ```yaml
 all:
   vars:
@@ -26,225 +44,216 @@ all:
   children:
     observation_servers:
       hosts:
-        <MONITORING_SERVER_IP>:
+        grafana01:
+          ansible_host: <MONITORING_SERVER_IP>
           ansible_user: <ANSIBLE_USER>
           ansible_ssh_private_key_file: "{{ ssh_key_path }}"
     monitoring_servers:
       hosts:
-        <OBSERVATION_SERVER_IP>:
+        monitoring-server02:
+          ansible_host: <OBSERVATION_SERVER_IP>
+          ansible_user: <ANSIBLE_USER>
+          ansible_ssh_private_key_file: "{{ ssh_key_path }}"
+        monitoring-server01:
+          ansible_host: <PROXY_SERVER_IP>
           ansible_user: <ANSIBLE_USER>
           ansible_ssh_private_key_file: "{{ ssh_key_path }}"
 ```
 
-2. Запусти плейбуки
+2. Set `grafana_admin_password` in the vault (see [Secrets / Vault](#secrets--vault) below).
 
-Grafana (monitoring сервер):
+3. Run the playbooks:
+
+Grafana, on the observation server (needs the vault password because `grafana_admin_password` lives there):
+
 ```bash
-ansible-playbook -i inventories/servers.yml playbooks/monitoring_server.yml --ask-vault-pass
+ansible-playbook -i inventories/servers.yml playbooks/observation_servers.yml --ask-vault-pass
 ```
 
-Prometheus + Loki (observation сервер):
+Prometheus + Loki + blackbox_exporter, on every monitoring server (no vault secrets involved):
+
 ```bash
 ansible-playbook -i inventories/servers.yml playbooks/monitoring_servers.yml
 ```
 
-## Роль Grafana
+## Role: `grafana`
 
-### Что делает
+### What it does
 
-- Устанавливает Grafana из APT зеркала
-- Конфигурирует nginx reverse proxy и TLS (Let's Encrypt)
-- Настраивает provisioning data sources (Prometheus, Loki)
-- Опционально включает firewall
-- Сбрасывает админ-пароль по флагу
+- Installs Grafana from the official APT repository, served through the `mirrors.cernet.edu.cn` mirror (worked around direct-access blocks to `apt.grafana.com`).
+- Installs and configures nginx as a reverse proxy in front of Grafana, and obtains/renews a Let's Encrypt certificate via the HTTP-01 (webroot) challenge — always, there is no toggle to skip nginx or TLS.
+- Provisions Grafana datasources and alert rules from static files.
+- Sets the Grafana admin password once.
+- Deploys an nftables ruleset that only allows 22, 80 and 443 — this is hardcoded in the template, not driven by a port-list variable.
 
-### Основные переменные
-
-`roles/grafana/defaults/main.yml`:
+### Variables (`roles/grafana/defaults/main.yml`)
 
 ```yaml
+grafana_admin_password: ""
 grafana_domain: <GRAFANA_DOMAIN>
 grafana_enable_https: true
-grafana_letsencrypt_email: "admin@{{ grafana_domain }}"
+grafana_letsencrypt_email: "admin@<GRAFANA_DOMAIN>"
 grafana_letsencrypt_webroot: /var/www/letsencrypt
-
-grafana_firewall_tcp_ports:
-  - 22
-  - 80
-  - 8080
-  - 443
-  - 9090
-  - 3100
-
-grafana_admin_password: ""
-grafana_admin_password_file: /var/lib/grafana/.admin_password_set
-
-grafana_prometheus_url: ""
-grafana_prometheus_datasource_name: "Prometheus"
-
-grafana_loki_url: ""
-grafana_loki_datasource_name: "Loki"
-
-# Feature toggles: enable/disable optional Grafana tasks
-grafana_install_nginx: true
-grafana_enable_firewall: true
-grafana_admin_force_reset: false
+grafana_manage_alerting_provisioning: true
 ```
 
-### Provisioning datasource
+`grafana_admin_password` must be set (normally via the vault) for the admin password to actually be reset; an empty value is a no-op.
 
-Datasource файлы появляются на сервере тут:
-- `/etc/grafana/provisioning/datasources/prometheus.yml`
-- `/etc/grafana/provisioning/datasources/loki.yml`
+There is no `grafana_firewall_tcp_ports`, `grafana_install_nginx`, `grafana_enable_firewall`, `grafana_prometheus_url`/`grafana_loki_url`, or `grafana_admin_force_reset` variable — nginx, TLS and the firewall always run, and datasource URLs come from the static files described below, not from role variables.
 
-По умолчанию IP берётся из группы `monitoring_servers`.
+### Datasources and alerting
 
-## Роль Prometheus
+Grafana datasources and alert rules are provisioned from plain YAML copied verbatim to the target:
 
-### Что делает
+- `inventories/files/grafana/datasources/<inventory_hostname>.yml` (falls back to `default.yml`) → `/etc/grafana/provisioning/datasources/datasources.yml`
+- `inventories/files/grafana/alerting/<inventory_hostname>.yml` (falls back to `default.yml`) → `/etc/grafana/provisioning/alerting/provision.yml` (only when `grafana_manage_alerting_provisioning` is true)
 
-- Устанавливает Prometheus (binaries)
-- Создаёт пользователя/группу
-- Разворачивает конфиг и systemd unit
-- Включает node_exporter
-- Проверяет readiness `/ready`
-- Настраивает firewall (nftables)
+To add, change or remove a datasource or alert rule, edit these files directly — for example, `inventories/files/grafana/datasources/grafana01.yml` lists one Prometheus and one Loki datasource per monitoring server, pointed at that server's public IP and port 9090/3100.
 
-### Основные переменные
+### Admin password reset behavior
 
-`roles/prometheus/defaults/main.yml`:
+The admin password is set with `grafana-cli admin reset-admin-password` only once: after the first successful reset, a marker file is created at `/var/lib/grafana/.admin_password_set` on the target, and the role skips the reset on every subsequent run (even if `grafana_admin_password` changes). To force a new password, delete that marker file on the server and rerun the playbook.
+
+## Role: `prometheus`
+
+### What it does
+
+- Downloads and installs the Prometheus and node_exporter binaries from GitHub releases (node_exporter is always installed — there is no toggle to disable it).
+- Creates a dedicated `prometheus` system user/group, systemd units, and validates the config with `promtool` before starting.
+- Waits for `/-/ready` to return 200.
+- Deploys an nftables ruleset (always — there is no toggle to disable the firewall step either).
+
+### Variables (`roles/prometheus/defaults/main.yml`)
 
 ```yaml
 prometheus_version: "2.49.1"
-prometheus_arch: "linux-amd64"
-prometheus_download_url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.{{ prometheus_arch }}.tar.gz"
-
-prometheus_web_listen_address: "0.0.0.0:9090"
-prometheus_enable_web_config: true
-prometheus_web_config_file: "{{ prometheus_config_dir }}/web.yml"
-prometheus_basic_auth_users: {}
-
-prometheus_enable_node_exporter: true
-prometheus_prometheus_targets:
-  - "127.0.0.1:9090"
-prometheus_node_exporter_targets:
-  - "127.0.0.1:9100"
-prometheus_extra_scrape_jobs: []
-
-prometheus_manage_firewall: true
-prometheus_firewall_tcp_ports:
-  - 22
-  - 9090
-prometheus_firewall_allow_9090_from_monitoring: true
-prometheus_firewall_allowed_ips: []
+node_exporter_version: "1.8.1"
 prometheus_firewall_whitelist_ips: []
 ```
 
-### Разные targets для разных хостов
+That's the entire set of role defaults. There is no `prometheus_prometheus_targets`, `prometheus_node_exporter_targets`, `prometheus_extra_scrape_jobs`, `prometheus_web_listen_address`, `prometheus_basic_auth_users`, `prometheus_manage_firewall`, or `prometheus_firewall_tcp_ports` variable in the role.
 
-Задай переменные в `inventories/host_vars/<ip>.yml`, например:
+### Scrape configuration (targets and jobs)
+
+`prometheus.yml` is **not** a template rendered from variables. It is copied as-is from:
+
+`inventories/files/prometheus/<inventory_hostname>.yml` (falls back to `default.yml`)
+
+To add a scrape target or job for a given host, edit that host's file directly, e.g. `inventories/files/prometheus/monitoring-server01.yml`:
 
 ```yaml
-prometheus_prometheus_targets:
-  - "127.0.0.1:9090"
-  - "10.10.10.11:9090"
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - "127.0.0.1:9090"
 
-prometheus_node_exporter_targets:
-  - "127.0.0.1:9100"
-  - "10.10.10.11:9100"
-  - "10.10.10.12:9100"
+  - job_name: node_exporter
+    static_configs:
+      - targets:
+          - "127.0.0.1:9100"
+          - "10.10.10.11:9100"   # another box you want scraped from this monitoring server
+          - "10.10.10.12:9100"
 
-prometheus_extra_scrape_jobs:
   - job_name: nginx_exporter
     static_configs:
       - targets:
           - "10.10.10.11:9113"
-  - job_name: alloy
-    static_configs:
-      - targets:
-          - "10.10.10.11:12345"
 ```
 
-### Белый список IP для Prometheus
+(`10.10.10.11` / `10.10.10.12` above are illustrative private RFC1918 addresses, not real infrastructure — replace them with your own targets.)
 
-Создай файл:
-`group_vars/monitoring_servers/whitelist.yml`
+Note: `inventories/host_vars/monitoring-server02.yml` and `inventories/host_vars/monitoring-server01.yml` still define `prometheus_prometheus_targets`, `prometheus_node_exporter_targets` and `prometheus_extra_scrape_jobs` — these look like they used to drive a templated config in an earlier version of the role, but current `roles/prometheus/tasks/main.yml` never reads them. They have no effect; the static files above are what actually matters.
 
-```yaml
-prometheus_firewall_whitelist_ips:
-  - <MONITORING_SERVER_IP>
-```
+Prometheus's own web config (`web.yml`, referenced via `--web.config.file`) currently only ever contains `basic_auth_users: {}` — the template has no variable in it, so the Prometheus web UI on port 9090 has no built-in authentication or TLS. Access is controlled purely by the firewall.
 
-Если список пустой, используется группа `observation_servers`.
+### Firewall / allow-list
 
-## Роль Loki
+Port 22 is always open. Port 9090 is opened to `prometheus_firewall_whitelist_ips` if that list is non-empty; otherwise it falls back to the `ansible_host` of every host in the `observation_servers` group.
 
-### Что делает
+## Role: `loki`
 
-- Устанавливает Loki и promtail (binaries)
-- Создаёт пользователя/группу
-- Разворачивает конфиг и systemd unit
-- Проверяет readiness `/ready`
-- Настраивает firewall (nftables)
+### What it does
 
-### Основные переменные
+- Downloads and installs the Loki and Promtail binaries, creates a `loki` system user/group, systemd units, and waits for Loki's `/ready` endpoint.
+- Deploys its own nftables ruleset (always).
 
-`roles/loki/defaults/main.yml`:
+### Variables (`roles/loki/defaults/main.yml`)
 
 ```yaml
 loki_version: "2.9.6"
-loki_arch: "linux-amd64"
-loki_download_url: "https://github.com/grafana/loki/releases/download/v{{ loki_version }}/loki-{{ loki_arch }}.zip"
-
-loki_listen_address: "0.0.0.0:3100"
-
 promtail_version: "2.9.6"
-promtail_arch: "linux-amd64"
-promtail_download_url: "https://github.com/grafana/loki/releases/download/v{{ promtail_version }}/promtail-{{ promtail_arch }}.zip"
-
-loki_firewall_tcp_ports:
-  - 22
-  - 3100
-loki_firewall_allow_3100_from_monitoring: true
-loki_firewall_allowed_ips: []
-loki_firewall_whitelist_ips: []
 ```
 
-### Белый список IP для Loki
+Only the two version pins are configurable. Everything else — listen addresses (`0.0.0.0:3100` for Loki, `9080` for Promtail), storage paths, and the log paths Promtail scrapes (`/var/log/*log`) — is fixed in `roles/loki/templates/loki.yml.j2` and `promtail.yml.j2`.
 
-Файл:
-`group_vars/monitoring_servers/whitelist.yml`
+### Firewall / allow-list
+
+Loki's nftables template opens port 3100 to `loki_firewall_whitelist_ips` (falling back to the `observation_servers` group's IPs, same logic as Prometheus), and *also* reopens port 9090, using `prometheus_firewall_whitelist_ips` directly (with no group fallback of its own). This matters because every role in `playbooks/monitoring_servers.yml` fully rewrites `/etc/nftables.conf` — see the note under `blackbox_exporter` below for why this still ends up correct in practice.
+
+## Role: `blackbox_exporter`
+
+### What it does
+
+- Downloads and installs the `blackbox_exporter` binary, creates a `blackbox` system user/group and a systemd unit listening on port 9115, and waits for `/metrics` to respond.
+- Deploys the final nftables ruleset for the host (see below).
+
+### Variables (`roles/blackbox_exporter/defaults/main.yml`)
 
 ```yaml
-loki_firewall_whitelist_ips:
-  - <MONITORING_SERVER_IP>
+blackbox_exporter_version: "0.25.0"
+blackbox_firewall_whitelist_ips: []
 ```
 
-Если список пустой, используется группа `observation_servers`.
+### Probe modules
 
-## Vault
+`blackbox.yml` is copied as-is from `inventories/files/blackbox_exporter/<inventory_hostname>.yml` (falls back to `default.yml`). It defines named probe modules (e.g. `proverka_cheka_ru`) that Prometheus's own `blackbox_exporter` scrape job (defined in the matching `inventories/files/prometheus/<host>.yml`) refers to by name and target URL.
 
-Админ-пароль Grafana хранится в vault:
-`inventories/group_vars/observation_servers/vault.yml`
+### Firewall — the role that has the last word
 
-Пример содержимого:
+`playbooks/monitoring_servers.yml` runs `prometheus`, then `loki`, then `blackbox_exporter`, and **every one of them deploys a full `/etc/nftables.conf` (`flush ruleset` included) and reloads it**. Since each role's template completely replaces the previous ruleset, the actually-effective firewall on a monitoring server is whichever role's template ran *last* in the play — currently `blackbox_exporter`. Its template recomputes the allow-lists for all three services and writes one combined ruleset covering ports 22, 9090, 3100 and 9115. `blackbox_firewall_whitelist_ips` falls back to `prometheus_firewall_whitelist_ips` if empty (not to the `observation_servers` group).
+
+In short: if you ever reorder the roles in `playbooks/monitoring_servers.yml`, double-check the firewall rules that end up in place — whichever role runs last determines the final ruleset.
+
+## Firewall / IP Allow-Lists
+
+`inventories/group_vars/monitoring_servers/whitelist.yml` sets the three allow-lists used above:
+
+```yaml
+prometheus_firewall_whitelist_ips:
+  - <PROXY_IP_1> # example proxy IP
+  - <MONITORING_SERVER_IP>
+
+loki_firewall_whitelist_ips:
+  - <PROXY_IP_1>
+  - <MONITORING_SERVER_IP>
+  - <PROXY_IP_2>
+  - <PROXY_IP_3>
+
+blackbox_firewall_whitelist_ips:
+  - <PROXY_IP_1>
+```
+
+If a list is empty, the fallback described under each role above kicks in instead.
+
+## Secrets / Vault
+
+`inventories/group_vars/observation_servers/vault.yml` is an ansible-vault-encrypted file that holds:
+
 ```yaml
 grafana_admin_password: "YourSecretPassword"
 ```
 
-Запуск с вводом пароля:
+Only `playbooks/observation_servers.yml` needs it, since only the `grafana` role reads `grafana_admin_password`:
+
 ```bash
-ansible-playbook -i inventories/servers.yml playbooks/monitoring_server.yml --ask-vault-pass
+ansible-playbook -i inventories/servers.yml playbooks/observation_servers.yml --ask-vault-pass
 ```
 
-## Плейбуки
+`playbooks/monitoring_servers.yml` does not touch any vaulted variable and does not need `--ask-vault-pass`.
 
-`playbooks/monitoring_server.yml` — Grafana
+## Notes
 
-`playbooks/monitoring_servers.yml` — Prometheus + Loki
-
-## Примечания
-
-- Grafana устанавливается через зеркало `mirrors.cernet.edu.cn` из-за блокировок прямого доступа.
-- Проверь DNS для домена Grafana и доступность 80/443, иначе Let's Encrypt не выдаст сертификат.
-- Для firewall убедись, что нужные IP указаны, иначе потеряешь доступ.
+- Grafana is installed through the `mirrors.cernet.edu.cn` APT mirror instead of `apt.grafana.com` directly, to work around access blocks.
+- Make sure DNS for `grafana_domain` and ports 80/443 are reachable *before* running the `grafana` role, or the Let's Encrypt HTTP-01 challenge will fail.
+- Every role deploys nftables by fully replacing `/etc/nftables.conf`. Double-check the IPs in your whitelists before applying — a mistake can lock you out of a host.
