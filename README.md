@@ -1,6 +1,6 @@
 [Read this in Russian](README.ru.md)
 
-# monitoring-server-configuration
+# grafana-prometheus-loki-ansible
 
 Ansible playbooks and roles that deploy a small distributed monitoring stack:
 

@@ -1,6 +1,6 @@
 [Read this in English](README.md)
 
-# monitoring-server-configuration
+# grafana-prometheus-loki-ansible
 
 Ansible-плейбуки и роли для развёртывания небольшого распределённого стека мониторинга:
 
